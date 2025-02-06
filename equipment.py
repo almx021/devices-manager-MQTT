@@ -1,8 +1,10 @@
-import random
+from datetime import datetime
 from threading import Lock, Event, Thread
 from time import sleep
 
-from paho.mqtt import client as mqtt
+import paho.mqtt.client as mqtt
+import random
+
 
 class Equipment:
     sensor_types = ('SPEED', 'TEMPERATURE', 'PRESSURE', 'HUMIDITY')
@@ -31,7 +33,7 @@ class Equipment:
             user_input = input(f"COMMANDS:\n\t{status}\n\tEXIT to stop the application\n").strip().upper()
             print()
 
-            if user_input in ('START','STOP'):
+            if user_input == ('START','STOP')[self.power_on]: # Checks whether user_input is START if power_on is false or STOP if power_on is true
                 self.power()
             elif user_input == 'EXIT':
                 with self.lock:
@@ -39,19 +41,21 @@ class Equipment:
                 if hasattr(self, 'measurement_thread'):
                     self.finish_lock.set()
                     self.measurement_lock.set()
-                print("TURNING OFF")
+                    self.alert_manager("DISCONNECTED")
                 break
 
 
     def start_measurements(self):
+        sleep(0.5)
         print('\nSTARTING MEASUREMENTS')
         while not self.finish_lock.is_set():
             self.measurement_lock.wait()
+            sleep(0.2)
             if self.power_on:
-                measurement = random.uniform(self.lower_limit - (0.2*self.lower_limit), self.upper_limit + (0.2*self.upper_limit))
+                measurement = round(random.uniform(self.lower_limit - (0.2*self.lower_limit), self.upper_limit + (0.2*self.upper_limit)), 1)
                 if self.lower_limit > measurement or measurement > self.upper_limit:
                     self.alert_manager(measurement)
-                sleep(1)
+                sleep(0.8)
 
     def power(self):
         with self.lock:
@@ -69,10 +73,11 @@ class Equipment:
             
 
     def alert_manager(self, measured_value):
-        print(f"----------ALERT [{self.name}]: {measured_value}----------")
-        r = self.client.publish(f"{self.client._client_id.decode()}", f"{measured_value}")
+        alert_time = datetime.now().strftime("%H:%M:%S")
+        print(f"[{alert_time}] - {self.name}: {measured_value}")
+        r = self.client.publish(f"{self.client._client_id.decode()}", f"{alert_time}//{measured_value}")
         if r.rc != 0:
-            print('mensagem não enviada')
+            print('Message not sent')
 
 if __name__ == '__main__':
     from sys import argv
